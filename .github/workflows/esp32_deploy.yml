@@ -1,0 +1,57 @@
+# .github/workflows/esp32_deploy.yml
+# =============================================
+# Runs every day at 03:00 UTC OR on every push
+# to the 'main' branch
+# =============================================
+
+name: ESP32 Auto Build & Flash
+
+on:
+  # Run on a schedule (cron format: minute hour day month weekday)
+  schedule:
+    - cron: "0 3 * * *"        # Every day at 03:00 UTC
+
+  # Also run on every push to main branch
+  push:
+    branches:
+      - main
+
+  # Allow manual trigger from GitHub Actions tab
+  workflow_dispatch:
+
+jobs:
+  build-and-flash:
+    name: Build and Flash ESP32
+    runs-on: self-hosted          # Must be your own PC with ESP32 connected
+
+    steps:
+      # ── Step 1: Check out the branch code ──────────────────────
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: main               # Change to your branch name
+
+      # ── Step 2: Set up ESP-IDF ──────────────────────────────────
+      - name: Set up ESP-IDF
+        uses: espressif/esp-idf-ci-action@v1
+        with:
+          esp_idf_version: v5.2.1
+          target: esp32           # Change to esp32s3, esp32c3, etc. if needed
+
+      # ── Step 3: Build the firmware ──────────────────────────────
+      - name: Build firmware
+        run: idf.py build
+
+      # ── Step 4: Flash to connected ESP32 ────────────────────────
+      - name: Flash to ESP32
+        run: idf.py -p ${{ secrets.ESP32_PORT }} flash
+        # Store your COM port as a secret in GitHub:
+        # Repo → Settings → Secrets → Actions → New secret
+        # Name: ESP32_PORT   Value: COM3
+
+      # ── Step 5: Upload build artifacts ──────────────────────────
+      - name: Upload firmware binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: esp32-firmware
+          path: build/*.bin
