@@ -1,4 +1,4 @@
-name: Build Verification
+name: ESP32 Build CI
 
 on:
   push:
@@ -7,17 +7,17 @@ on:
     branches: [ "main" ]
 
 jobs:
-  build_esp32:
+  build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout Repository
+      - name: Checkout code
         uses: actions/checkout@v4
         with:
           submodules: 'recursive'
 
-      - name: esp-idf build
+      - name: Build with ESP-IDF
         uses: espressif/esp-idf-ci-action@v1
         with:
-          esp_idf_version: v5.1 # Use your specific version
+          esp_idf_version: v5.3.1
           target: esp32
           path: '.'
