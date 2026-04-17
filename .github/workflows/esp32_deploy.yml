@@ -1,21 +1,23 @@
-name: ESP-IDF Build Check
+name: Build Verification
+
 on:
   push:
-    branches: [ main ]
-  schedule:
-    - cron: '0 0 * * *' # Runs every day at midnight (UTC)
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
 
 jobs:
-  build:
+  build_esp32:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
+      - name: Checkout Repository
         uses: actions/checkout@v4
         with:
           submodules: 'recursive'
 
-      - name: Build ESP-IDF project
+      - name: esp-idf build
         uses: espressif/esp-idf-ci-action@v1
         with:
-          esp_idf_version: v5.1 # Match your local version
+          esp_idf_version: v5.1 # Use your specific version
           target: esp32
+          path: '.'
