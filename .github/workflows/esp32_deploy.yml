@@ -1,23 +1,106 @@
-name: ESP32 Build CI
+# ============================================================================
+#  GitHub Actions workflow: ESP32 Daily Build & Flash
+# ----------------------------------------------------------------------------
+#  Place this file in your repo at:  .github/workflows/esp32-build-flash.yml
+#
+#  This workflow:
+#    1. Runs every day at 03:00 UTC (change the cron expression for your TZ).
+#    2. Can also be triggered manually from the "Actions" tab.
+#    3. Runs on a SELF-HOSTED runner installed on the PC where the ESP32
+#       is physically connected via USB.
+#
+#  Cron reference:   min hour day month weekday
+#      "0 3 * * *"      = 03:00 UTC daily
+#      "30 8 * * 1-5"   = 08:30 UTC Mon-Fri
+#      Convert your local time to UTC before entering it here.
+#
+#  SELF-HOSTED RUNNER SETUP (one-time):
+#    1. In GitHub: Repo Settings -> Actions -> Runners -> New self-hosted runner
+#    2. Choose Windows x64 and follow the commands shown.
+#    3. Tag the runner with labels: self-hosted, windows, esp32
+#    4. Install it as a service so it starts automatically at boot.
+# ============================================================================
+
+name: ESP32 Daily Build and Flash
 
 on:
+  schedule:
+    - cron: "0 3 * * *"          # Daily at 03:00 UTC - adjust to your timezone
   push:
-    branches: [ "main" ]
-  pull_request:
-    branches: [ "main" ]
+    branches: [ main ]            # Also run on every push to main (optional)
+  workflow_dispatch:              # Enables the manual "Run workflow" button
+
+env:
+  IDF_VERSION: "v5.1.2"
+  ESP32_PORT:  "COM5"             # Serial port on the self-hosted runner PC
+  IDF_EXPORT:  "C:\\Espressif\\frameworks\\esp-idf-v5.1\\export.ps1"
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
+  build-and-flash:
+    name: Build and Flash ESP32
+    runs-on: [self-hosted, windows, esp32]
+    timeout-minutes: 30
+
     steps:
-      - name: Checkout code
+      - name: Check out repository
         uses: actions/checkout@v4
         with:
-          submodules: 'recursive'
+          fetch-depth: 0           # Full history so we can tag commits
 
-      - name: Build with ESP-IDF
-        uses: espressif/esp-idf-ci-action@v1
+      - name: Show commit being built
+        shell: pwsh
+        run: |
+          $sha = (git rev-parse --short HEAD).Trim()
+          Write-Host "Building commit: $sha"
+          "COMMIT_SHA=$sha" | Out-File -Append -FilePath $env:GITHUB_ENV
+
+      - name: Load ESP-IDF environment and build
+        shell: pwsh
+        run: |
+          if (-not (Test-Path $env:IDF_EXPORT)) {
+            throw "ESP-IDF export script not found at $env:IDF_EXPORT"
+          }
+          . $env:IDF_EXPORT
+          idf.py fullclean
+          idf.py build
+          if ($LASTEXITCODE -ne 0) { throw "idf.py build failed" }
+
+      - name: Archive firmware binary
+        uses: actions/upload-artifact@v4
         with:
-          esp_idf_version: v5.3.1
-          target: esp32
-          path: '.'
+          name: firmware-${{ env.COMMIT_SHA }}
+          path: |
+            build/*.bin
+            build/*.elf
+            build/*.map
+          retention-days: 14
+
+      - name: Flash the ESP32
+        shell: pwsh
+        run: |
+          . $env:IDF_EXPORT
+          idf.py -p $env:ESP32_PORT flash
+          if ($LASTEXITCODE -ne 0) { throw "idf.py flash failed" }
+
+      - name: Print firmware size
+        shell: pwsh
+        run: |
+          . $env:IDF_EXPORT
+          idf.py size
+
+      - name: Tag successful flash in Git
+        if: success()
+        shell: pwsh
+        run: |
+          $tag = "flashed-$(Get-Date -Format 'yyyyMMdd-HHmm')"
+          git config user.name  "github-actions"
+          git config user.email "actions@github.com"
+          git tag $tag
+          git push origin $tag
+
+      - name: Notify on failure
+        if: failure()
+        shell: pwsh
+        run: |
+          Write-Host "::error::Build or flash failed for commit $env:COMMIT_SHA"
+          # Add Slack / Teams / e-mail webhook calls here if desired.
