@@ -27,7 +27,7 @@ void app_main(void)
         // Turn LED ON
         gpio_set_level(LED_PIN, 1);
         printf("LED ON\n");
-        vTaskDelay(100 / portTICK_PERIOD_MS);  // Wait 1 second
+        vTaskDelay(1000 / portTICK_PERIOD_MS);  // Wait 1 second
         
         // Turn LED OFF
         gpio_set_level(LED_PIN, 0);
